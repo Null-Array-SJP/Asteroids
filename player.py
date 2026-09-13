@@ -1,5 +1,5 @@
 import pygame
-from constants import LINE_WIDTH, PLAYER_RADIUS, PLAYER_TURN_SPEED, PLAYER_SPEED, PLAYER_SHOOT_SPEED, PLAYER_SHOOT_COOLDOWN_SECONDS
+from constants import LINE_WIDTH, PLAYER_RADIUS, PLAYER_TURN_SPEED, PLAYER_SPEED, PLAYER_SHOOT_SPEED, PLAYER_SHOOT_COOLDOWN_SECONDS, SCREEN_WIDTH, SCREEN_HEIGHT
 from circleshape import CircleShape
 from shot import Shot
 
@@ -8,6 +8,7 @@ class Player(CircleShape):
         super().__init__(x, y, PLAYER_RADIUS)
         self.rotation = 0
         self.cooldown_timer = 0
+        self.invulnerable_timer = 0
 
     def triangle(self) -> list[pygame.Vector2]:
         forward = pygame.Vector2(0, 1).rotate(self.rotation)
@@ -18,13 +19,19 @@ class Player(CircleShape):
         return [a, b, c]
 
     def draw(self, screen: pygame.Surface) -> None:
+        if self.invulnerable_timer > 0:
+            if int(self.invulnerable_timer * 10) % 2 == 0:
+                return
         pygame.draw.polygon(screen, "white", self.triangle(), LINE_WIDTH)
 
     def rotate(self, dt: float) -> None:
         self.rotation += (PLAYER_TURN_SPEED * dt)
 
     def update(self, dt: float) -> None:
+        if self.invulnerable_timer > 0:
+            self.invulnerable_timer -= dt
         self.cooldown_timer -= dt
+        self.wrap_around_screen()
         keys = pygame.key.get_pressed()
         if keys[pygame.K_a]:
             self.rotate(-dt)
@@ -43,6 +50,16 @@ class Player(CircleShape):
         rotated_with_speed_vector = rotated_vector * PLAYER_SPEED * dt
         self.position += rotated_with_speed_vector
 
+    def collides_with(self, other):
+        points = self.triangle()
+        p1, p2, p3 = points[0], points[1], points[2]
+
+        edge1 = self.line_intersects_circle(p1, p2, other.position, other.radius)
+        edge2 = self.line_intersects_circle(p2, p3, other.position, other.radius)
+        edge3 = self.line_intersects_circle(p3, p1, other.position, other.radius)
+
+        return edge1 or edge2 or edge3
+
     def shoot(self) -> None:
         if self.cooldown_timer > 0:
             return
@@ -50,3 +67,8 @@ class Player(CircleShape):
             bullet = Shot(self.position.x, self.position.y)
             bullet.velocity = pygame.Vector2(0, 1).rotate(self.rotation) * PLAYER_SHOOT_SPEED
             self.cooldown_timer = PLAYER_SHOOT_COOLDOWN_SECONDS
+
+    def respawn(self):
+        self.position = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+        self.rotation = 0
+        self.invulnerable_timer = 2.0
